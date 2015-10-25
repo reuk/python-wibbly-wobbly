@@ -1,57 +1,13 @@
-try:
-    from AppKit import NSApp, NSApplication
-except:
-    pass
+import pyrr
 
-import cyglfw3 as glfw
+from opengl_helpers import VAO, Program, ShaderProgram
+from windowing_context import WindowingContext
 
-from OpenGL.GL import *
 from OpenGL.GL import shaders
-from OpenGL.GLU import *
+from OpenGL.GL import *
 from OpenGL.arrays import vbo
 
 import numpy as np
-
-import pyaudio
-import wave
-
-import pyrr
-
-class VAO(object):
-    def __init__(self):
-        self.index = GLuint(0)
-        glGenVertexArrays(1, self.index)
-
-    def __enter__(self):
-        glBindVertexArray(self.index)
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        glBindVertexArray(0)
-
-class Program(object):
-    def __init__(self):
-        self.index = glCreateProgram()
-
-    def __enter__(self):
-        glUseProgram(self.index)
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        glUseProgram(0)
-
-    def attach(self, i):
-        glAttachShader(self.index, i)
-
-    def link(self):
-        glLinkProgram(self.index)
-
-class ShaderProgram(Program):
-    def __init__(self, v, f):
-        super(ShaderProgram, self).__init__()
-        self.attach(v)
-        self.attach(f)
-        self.link()
 
 class Cube(object):
     def __init__(self, shader):
@@ -64,7 +20,7 @@ class Cube(object):
             (1, 1, 1),
             (-1, -1, 1),
             (-1, 1, 1),
-            ], dtype='f')
+            ], dtype=np.float32)
 
         self.colors = np.array([
             (0, 1, 1),
@@ -75,7 +31,7 @@ class Cube(object):
             (0, 1, 1),
             (0, 1, 1),
             (0, 1, 1),
-            ], dtype='f')
+            ], dtype=np.float32)
 
         self.indices = np.array([
             (0, 1),
@@ -112,90 +68,6 @@ class Cube(object):
     def draw(self):
         with self.vao:
             glDrawElements(GL_LINES, 24, GL_UNSIGNED_BYTE, None)
-
-class WindowingContext(object):
-    def __enter__(self):
-        glfw.SetErrorCallback(self.error_callback)
-
-        if not glfw.Init():
-            exit()
-
-        glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, 3)
-        glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, 2)
-        glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, True)
-        glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-        glfw.WindowHint(glfw.SAMPLES, 4)
-        glfw.WindowHint(glfw.RESIZABLE, True)
-
-        self.size = (500, 500)
-        self.window = glfw.CreateWindow(self.size[0], self.size[1], "")
-
-        if not self.window:
-            glfw.Terminate()
-            exit()
-
-        glfw.MakeContextCurrent(self.window)
-        glfw.SwapInterval(1)
-
-        glfw.SetKeyCallback(self.window, self.key_callback)
-        glfw.SetFramebufferSizeCallback(self.window, self.resize_callback)
-
-        self.previous_seconds = 0
-
-        self.p = pyaudio.PyAudio()
-        self.stream = self.p.open(
-                format=pyaudio.paFloat32,
-                channels=2,
-                rate=44100,
-                output=True,
-                stream_callback=self.audio_callback)
-
-        self.stream.start_stream()
-
-        return self
-
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        self.stream.stop_stream()
-        self.stream.close()
-
-        self.p.terminate()
-
-        glfw.Terminate()
-
-    def run(self):
-        w, h = glfw.GetFramebufferSize(self.window)
-        while not glfw.WindowShouldClose(self.window):
-            ct = glfw.GetTime()
-            dt = ct - self.previous_seconds
-            self.previous_seconds = ct
-
-            estimated_frame_rate = 60
-            dt *= estimated_frame_rate
-
-            self.update(dt)
-            self.draw()
-
-            glfw.SwapBuffers(self.window)
-            glfw.PollEvents()
-
-    def audio_callback(self, in_data, frame_count, time_info, status):
-        data = np.zeros(frame_count)
-        return (data, pyaudio.paContinue)
-
-    def update(self, dt):
-        pass
-
-    def draw(self):
-        pass
-
-    def key_callback(self, window, key, scancode, action, mods):
-        pass
-
-    def resize_callback(self, window, w, h):
-        self.size = (w, h)
-
-    def error_callback(self, window, error, description):
-        print error, description
 
 def mag(v):
     return np.sqrt(np.vdot(v, v))
@@ -265,6 +137,9 @@ class CubeApp(WindowingContext):
         angle_matrix = pyrr.matrix44.create_from_x_rotation(self.time * 0.01)
         position_matrix = pyrr.matrix44.create_from_translation(np.array([0, 0, 0]))
         model_matrix = np.dot(np.dot(scale_matrix, angle_matrix), position_matrix)
+
+        l_channel = self.audio_frame[:, 0]
+        r_channel = self.audio_frame[:, 1]
 
         glClearColor(0, 0, 0, 1)
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
