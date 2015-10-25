@@ -29,7 +29,7 @@ class WindowingContext(object):
         glfw.WindowHint(glfw.SAMPLES, 4)
         glfw.WindowHint(glfw.RESIZABLE, True)
 
-        self.size = (500, 500)
+        self.size = (1920, 1080)
         self.window = glfw.CreateWindow(self.size[0], self.size[1], "")
 
         if not self.window:

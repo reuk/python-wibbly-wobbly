@@ -15,6 +15,9 @@ class VAO(object):
     def __exit__(self, exc_type, exc_value, exc_tb):
         glBindVertexArray(0)
 
+    def __int__(self):
+        return self.index
+
 class Program(object):
     def __init__(self):
         self.index = glCreateProgram()
@@ -31,6 +34,9 @@ class Program(object):
 
     def link(self):
         glLinkProgram(self.index)
+
+    def __int__(self):
+        return self.index
 
 class ShaderProgram(Program):
     def __init__(self, v, f):

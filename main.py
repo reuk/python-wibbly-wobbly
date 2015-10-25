@@ -8,66 +8,11 @@ from OpenGL.GL import *
 from OpenGL.arrays import vbo
 
 import numpy as np
+import random
+from palette import PALETTE
 
-class Cube(object):
-    def __init__(self, shader):
-        self.vertices = np.array([
-            (1, -1, -1),
-            (1, 1, -1),
-            (-1, 1, -1),
-            (-1, -1, -1),
-            (1, -1, 1),
-            (1, 1, 1),
-            (-1, -1, 1),
-            (-1, 1, 1),
-            ], dtype=np.float32)
-
-        self.colors = np.array([
-            (0, 1, 1),
-            (0, 1, 1),
-            (0, 1, 1),
-            (0, 1, 1),
-            (0, 1, 1),
-            (0, 1, 1),
-            (0, 1, 1),
-            (0, 1, 1),
-            ], dtype=np.float32)
-
-        self.indices = np.array([
-            (0, 1),
-            (0, 3),
-            (0, 4),
-            (2, 1),
-            (2, 3),
-            (2, 7),
-            (6, 3),
-            (6, 4),
-            (6, 7),
-            (5, 1),
-            (5, 4),
-            (5, 7),
-            ], dtype=np.uint8)
-        self.vertex_bo = vbo.VBO(self.vertices)
-        self.color_bo  = vbo.VBO(self.colors)
-        self.index_bo = vbo.VBO(self.indices, target=GL_ELEMENT_ARRAY_BUFFER)
-
-        self.vao = VAO()
-        with self.vao:
-            v_position = glGetAttribLocation(shader.index, "v_position")
-            glEnableVertexAttribArray(v_position)
-            self.vertex_bo.bind()
-            glVertexAttribPointer(v_position, 3, GL_FLOAT, False, 0, None)
-
-            v_color = glGetAttribLocation(shader.index, "v_color")
-            glEnableVertexAttribArray(v_color)
-            self.color_bo.bind()
-            glVertexAttribPointer(v_color, 3, GL_FLOAT, False, 0, None)
-
-            self.index_bo.bind()
-
-    def draw(self):
-        with self.vao:
-            glDrawElements(GL_LINES, 24, GL_UNSIGNED_BYTE, None)
+from cube import Cube
+from point_sphere import PointSphere
 
 def mag(v):
     return np.sqrt(np.vdot(v, v))
@@ -79,11 +24,15 @@ class CubeApp(WindowingContext):
     def __enter__(self):
         super(CubeApp, self).__enter__()
 
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE)
+
         VERTEX_SHADER = shaders.compileShader("""
         #version 330
         in vec3 v_position;
-        in vec3 v_color;
-        out vec3 f_color;
+        in vec4 v_color;
+        out vec4 f_color;
         uniform mat4 v_model;
         uniform mat4 v_view;
         uniform mat4 v_projection;
@@ -95,26 +44,31 @@ class CubeApp(WindowingContext):
 
         FRAGMENT_SHADER = shaders.compileShader("""
         #version 330
-        in vec3 f_color;
+        in vec4 f_color;
         out vec4 frag_color;
         void main() {
-            frag_color = vec4(f_color, 1.0);
+            frag_color = f_color;
         }
         """, GL_FRAGMENT_SHADER)
 
         self.shader = ShaderProgram(VERTEX_SHADER, FRAGMENT_SHADER)
 
         self.cube = Cube(self.shader)
+        self.point_sphere = PointSphere(self.shader)
 
         self.time = 0
+
+        glPointSize(2)
 
         return self
 
     def update(self, dt):
         self.time += dt
 
+        self.point_sphere.update(dt)
+
     def draw(self):
-        eye = np.array([5, 5, 5], dtype=np.float32)
+        eye = np.array([5, 3, 5], dtype=np.float32)
         target = np.array([0, 0, 0], dtype=np.float32)
         up = np.array([0, 1, 0], dtype=np.float32)
 
@@ -134,24 +88,27 @@ class CubeApp(WindowingContext):
 
         scale = 2
         scale_matrix = pyrr.matrix44.create_from_scale(np.array([scale, scale, scale]))
-        angle_matrix = pyrr.matrix44.create_from_x_rotation(self.time * 0.01)
+        angle_matrix = pyrr.matrix44.create_from_y_rotation(self.time * 0.01)
         position_matrix = pyrr.matrix44.create_from_translation(np.array([0, 0, 0]))
         model_matrix = np.dot(np.dot(scale_matrix, angle_matrix), position_matrix)
 
         l_channel = self.audio_frame[:, 0]
         r_channel = self.audio_frame[:, 1]
 
+        glLineWidth(1)
+
         glClearColor(0, 0, 0, 1)
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
         with self.shader:
-            glUniformMatrix4fv(glGetUniformLocation(self.shader.index, "v_projection"),
+            glUniformMatrix4fv(glGetUniformLocation(self.shader, "v_projection"),
                     1, False, projection_matrix)
-            glUniformMatrix4fv(glGetUniformLocation(self.shader.index, "v_view"),
+            glUniformMatrix4fv(glGetUniformLocation(self.shader, "v_view"),
                     1, False, view_matrix)
-            glUniformMatrix4fv(glGetUniformLocation(self.shader.index, "v_model"),
+            glUniformMatrix4fv(glGetUniformLocation(self.shader, "v_model"),
                     1, False, model_matrix)
 
-            self.cube.draw()
+#            self.cube.draw()
+            self.point_sphere.draw()
 
     def resize_callback(self, window, w, h):
         super(CubeApp, self).resize_callback(window, w, h)
